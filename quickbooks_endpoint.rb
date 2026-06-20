@@ -16,8 +16,10 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     })
   end
 
+  set :public_folder, File.join(File.dirname(__FILE__), 'public')
+
   get '/' do
-    send_file File.join('public', 'index.html')
+    send_file File.join(settings.public_folder, 'index.html')
   end
 
   # ─── OAuth Routes ───────────────────────────────────────────

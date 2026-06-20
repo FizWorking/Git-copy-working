@@ -39,9 +39,20 @@ const API = {
   disconnectConnection(id) { return this.delete(`/api/qbo/connections/${id}`); },
 
   uploadFile(file) {
-    const fd = new FormData();
-    fd.append('file', file);
-    return this.post('/api/import/upload', fd);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const result = await this.post('/api/import/upload', {
+            fileName: file.name,
+            fileData: reader.result.split(',')[1]
+          });
+          resolve(result);
+        } catch (e) { reject(e); }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
   },
   executeImport(data) { return this.post('/api/import/execute', data); },
   getHistory() { return this.get('/api/import/history'); },

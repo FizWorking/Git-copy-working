@@ -1,6 +1,8 @@
 require_relative 'lib/qb_integration'
 require 'securerandom'
 require 'fileutils'
+require 'base64'
+require 'tempfile'
 
 class QuickbooksEndpoint < EndpointBase::Sinatra::Base
   set :logging, true
@@ -77,21 +79,31 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
   # ─── Import API ─────────────────────────────────────────────
 
   post '/api/import/upload' do
-    unless params[:file] && params[:file][:tempfile]
-      halt 400, { error: 'No file uploaded' }.to_json
+    file_name = @payload['fileName']
+    file_data = @payload['fileData']
+
+    unless file_name && file_data
+      halt 400, { error: 'No file data provided' }.to_json
     end
 
-    ext = File.extname(params[:file][:filename]).downcase
-    data = parse_uploaded_file(params[:file][:tempfile], ext)
+    ext = File.extname(file_name).downcase
+    decoded = Base64.decode64(file_data)
+    tempfile = Tempfile.new(['upload', ext])
+    tempfile.binmode
+    tempfile.write(decoded)
+    tempfile.rewind
+
+    data = parse_uploaded_file(tempfile, ext)
+    tempfile.close!
+    data[:file_name] = file_name
 
     file_id = SecureRandom.uuid
-    data[:file_name] = params[:file][:filename]
     store_file_data(file_id, data)
 
     content_type :json
     {
       fileId: file_id,
-      fileName: params[:file][:filename],
+      fileName: file_name,
       columns: data[:columns],
       preview: data[:preview],
       totalRows: data[:totalRows]
@@ -99,13 +111,12 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
   end
 
   post '/api/import/execute' do
-    body = JSON.parse(request.body.read)
-    file_id = body['fileId']
-    connection_id = body['connectionId']
-    transaction_type = body['transactionType']
-    mapping = body['mapping'] || {}
-    defaults = body['defaults'] || {}
-    date_format = body['dateFormat'] || ''
+    file_id = @payload['fileId']
+    connection_id = @payload['connectionId']
+    transaction_type = @payload['transactionType']
+    mapping = @payload['mapping'] || {}
+    defaults = @payload['defaults'] || {}
+    date_format = @payload['dateFormat'] || ''
 
     unless file_id && connection_id
       halt 400, { error: 'Missing required fields' }.to_json

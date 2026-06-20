@@ -11,6 +11,7 @@ gem 'tzinfo'
 gem 'capistrano'
 gem 'unicorn'
 gem 'builder'
+gem 'roo', '~> 2.8'
 
 group :development do
   gem 'rake'

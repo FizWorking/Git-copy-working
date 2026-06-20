@@ -2,6 +2,7 @@ $:.unshift File.dirname(__FILE__)
 
 require 'oauth'
 require 'quickbooks-ruby'
+require 'store'
 
 require 'qb_integration/helper'
 require 'qb_integration/auth'

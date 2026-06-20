@@ -3,72 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuickBooks Integration Tool</title>
-  <link rel="stylesheet" href="/style.css">
+  <title>QuickBooks Bulk Importer</title>
+  <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>QuickBooks Online Import Tool</h1>
-      <p>Upload Excel &bull; Map Data &bull; Sync to QuickBooks</p>
-    </header>
-
-    <section class="card" id="authSection">
-      <h2>Step 1: Connect to QuickBooks Online</h2>
-      <p style="color:#7f8c8d;margin-bottom:12px;font-size:0.9em">
-        Get tokens from <a href="https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0" target="_blank">Intuit OAuth Playground</a>
-        or your QuickBooks app.
-      </p>
-      <div class="auth-grid">
-        <input type="text" id="qboAccessToken" class="input-text" placeholder="Access Token *" />
-        <input type="text" id="qboRefreshToken" class="input-text" placeholder="Refresh Token *" />
-        <input type="text" id="qboRealmId" class="input-text" placeholder="Realm ID (Company ID) *" />
-        <label class="checkbox-label">
-          <input type="checkbox" id="qboSandbox" />
-          Sandbox mode
-        </label>
+  <div id="app">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <h2>QB Importer</h2>
+        <p class="sidebar-sub">QuickBooks Online Bulk Import</p>
       </div>
-      <div id="authStatus" class="info-box">
-        Set <code>QB_CONSUMER_CLIENT_ID</code> and <code>QB_CONSUMER_CLIENT_SECRET</code> in Render env vars.
-        <button id="validateTokenBtn" class="btn btn-small" style="margin-top:8px">Validate Connection</button>
-        <span id="validateResult" style="margin-left:8px"></span>
+      <nav class="sidebar-nav">
+        <a href="#/dashboard" class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">&#9632;</span> Dashboard
+        </a>
+        <a href="#/import" class="nav-item" data-page="import">
+          <span class="nav-icon">&#9650;</span> Import
+        </a>
+        <a href="#/history" class="nav-item" data-page="history">
+          <span class="nav-icon">&#9776;</span> History
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info" id="userInfo">
+          <span class="user-name">User</span>
+        </div>
       </div>
-    </section>
+    </aside>
 
-    <section class="card">
-      <h2>Step 2: Select Data Type</h2>
-      <select id="entityType" class="input-select">
-        <option value="">-- Select --</option>
-        <option value="customer">Customer</option>
-        <option value="vendor">Vendor</option>
-        <option value="bill">Bill (from Purchase Order)</option>
-      </select>
-      <div id="fieldInfo" class="info-box"></div>
-    </section>
-
-    <section class="card">
-      <h2>Step 3: Upload Excel File</h2>
-      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="input-file">
-      <div id="uploadStatus" class="status-msg"></div>
-    </section>
-
-    <section class="card" id="previewSection" style="display:none">
-      <h2>Step 4: Preview &amp; Map Columns</h2>
-      <div class="mapping-grid" id="mappingContainer"></div>
-      <div class="table-wrapper" id="tableWrapper"></div>
-    </section>
-
-    <section class="card" id="submitSection" style="display:none">
-      <h2>Step 5: Submit to QuickBooks</h2>
-      <button id="submitBtn" class="btn btn-primary">Send to QuickBooks</button>
-      <div id="progress" class="progress-bar" style="display:none">
-        <div class="progress-fill" id="progressFill"></div>
-      </div>
-      <div id="results" class="results"></div>
-    </section>
+    <main id="main">
+      <div id="pageContent"></div>
+    </main>
   </div>
 
+  <div id="toast" class="toast hidden"></div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="/app.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/pages/dashboard.js"></script>
+  <script src="js/pages/import.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

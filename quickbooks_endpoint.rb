@@ -6,8 +6,7 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
   set :show_exceptions, false
 
   get '/' do
-    content_type :json
-    { status: 'ok' }.to_json
+    send_file File.join('public', 'index.html')
   end
 
   before do

@@ -19,11 +19,11 @@ module QBIntegration
     end
 
     def self.client_id
-      ENV['QB_CONSUMER_CLIENT_ID'] || ENV['QB_CONSUMER_KEY']
+      ENV['QBO_CLIENT_ID'] || ENV['QB_CONSUMER_CLIENT_ID'] || ENV['QB_CONSUMER_KEY']
     end
 
     def self.client_secret
-      ENV['QB_CONSUMER_CLIENT_SECRET'] || ENV['QB_CONSUMER_SECRET']
+      ENV['QBO_CLIENT_SECRET'] || ENV['QB_CONSUMER_CLIENT_SECRET'] || ENV['QB_CONSUMER_SECRET']
     end
 
     def self.redirect_uri

@@ -25,7 +25,7 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
 
   get '/api/qbo/auth-url' do
     unless QBIntegration::Auth.client_id
-      halt 400, { error: 'QBO_CLIENT_ID not configured. Set QB_CONSUMER_CLIENT_ID or QB_CONSUMER_KEY env var.' }.to_json
+      halt 400, { error: 'QBO Client ID not configured. Set QBO_CLIENT_ID env var (or QB_CONSUMER_CLIENT_ID / QB_CONSUMER_KEY).' }.to_json
     end
     state = SecureRandom.hex(16)
     url = QBIntegration::Auth.authorization_url(state)

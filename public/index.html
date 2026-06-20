@@ -13,8 +13,30 @@
       <p>Upload Excel &bull; Map Data &bull; Sync to QuickBooks</p>
     </header>
 
+    <section class="card" id="authSection">
+      <h2>Step 1: Connect to QuickBooks Online</h2>
+      <p style="color:#7f8c8d;margin-bottom:12px;font-size:0.9em">
+        Get tokens from <a href="https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0" target="_blank">Intuit OAuth Playground</a>
+        or your QuickBooks app.
+      </p>
+      <div class="auth-grid">
+        <input type="text" id="qboAccessToken" class="input-text" placeholder="Access Token *" />
+        <input type="text" id="qboRefreshToken" class="input-text" placeholder="Refresh Token *" />
+        <input type="text" id="qboRealmId" class="input-text" placeholder="Realm ID (Company ID) *" />
+        <label class="checkbox-label">
+          <input type="checkbox" id="qboSandbox" />
+          Sandbox mode
+        </label>
+      </div>
+      <div id="authStatus" class="info-box">
+        Set <code>QB_CONSUMER_CLIENT_ID</code> and <code>QB_CONSUMER_CLIENT_SECRET</code> in Render env vars.
+        <button id="validateTokenBtn" class="btn btn-small" style="margin-top:8px">Validate Connection</button>
+        <span id="validateResult" style="margin-left:8px"></span>
+      </div>
+    </section>
+
     <section class="card">
-      <h2>Step 1: Select Data Type</h2>
+      <h2>Step 2: Select Data Type</h2>
       <select id="entityType" class="input-select">
         <option value="">-- Select --</option>
         <option value="customer">Customer</option>
@@ -25,19 +47,19 @@
     </section>
 
     <section class="card">
-      <h2>Step 2: Upload Excel File</h2>
+      <h2>Step 3: Upload Excel File</h2>
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="input-file">
       <div id="uploadStatus" class="status-msg"></div>
     </section>
 
     <section class="card" id="previewSection" style="display:none">
-      <h2>Step 3: Preview &amp; Map Columns</h2>
+      <h2>Step 4: Preview &amp; Map Columns</h2>
       <div class="mapping-grid" id="mappingContainer"></div>
       <div class="table-wrapper" id="tableWrapper"></div>
     </section>
 
     <section class="card" id="submitSection" style="display:none">
-      <h2>Step 4: Submit to QuickBooks</h2>
+      <h2>Step 5: Submit to QuickBooks</h2>
       <button id="submitBtn" class="btn btn-primary">Send to QuickBooks</button>
       <div id="progress" class="progress-bar" style="display:none">
         <div class="progress-fill" id="progressFill"></div>

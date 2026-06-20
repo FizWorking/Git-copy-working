@@ -48,6 +48,39 @@ let parsedData = [];
 let currentEntity = '';
 let headerRow = [];
 
+function getQboParams() {
+  const params = {};
+  const at = document.getElementById('qboAccessToken').value.trim();
+  const rt = document.getElementById('qboRefreshToken').value.trim();
+  const realm = document.getElementById('qboRealmId').value.trim();
+  if (at) params.quickbooks_access_token = at;
+  if (rt) params.quickbooks_access_secret = rt;
+  if (realm) params.quickbooks_realm = realm;
+  if (document.getElementById('qboSandbox').checked) params.quickbooks_sandbox = '1';
+  return params;
+}
+
+document.getElementById('validateTokenBtn').addEventListener('click', async function() {
+  const params = getQboParams();
+  if (!params.quickbooks_access_token || !params.quickbooks_realm) {
+    document.getElementById('validateResult').innerHTML = '<span style="color:#e74c3c">Access Token aur Realm ID dono dalo</span>';
+    return;
+  }
+  document.getElementById('validateResult').textContent = 'Validating...';
+  try {
+    const res = await fetch(ENDPOINT + '/validate_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parameters: params })
+    });
+    document.getElementById('validateResult').innerHTML = res.ok
+      ? '<span style="color:#27ae60">Connected to QuickBooks!</span>'
+      : '<span style="color:#e74c3c">Connection failed. Check tokens.</span>';
+  } catch (err) {
+    document.getElementById('validateResult').innerHTML = '<span style="color:#e74c3c">Error: ' + err.message + '</span>';
+  }
+});
+
 document.getElementById('entityType').addEventListener('change', function() {
   currentEntity = this.value;
   const infoBox = document.getElementById('fieldInfo');
@@ -231,6 +264,8 @@ function buildPayload(entity, row, mapping, config) {
     return col ? row[col] : '';
   };
 
+  const qboParams = getQboParams();
+
   if (entity === 'customer') {
     return {
       customer: {
@@ -246,7 +281,7 @@ function buildPayload(entity, row, mapping, config) {
           zipcode: getVal('zipcode')
         }
       },
-      parameters: {}
+      parameters: qboParams
     };
   }
 
@@ -264,7 +299,7 @@ function buildPayload(entity, row, mapping, config) {
         zipcode: getVal('zipcode'),
         sysid: getVal('sysid')
       },
-      parameters: {}
+      parameters: qboParams
     };
   }
 
@@ -281,7 +316,7 @@ function buildPayload(entity, row, mapping, config) {
         ]
       },
       bill: {},
-      parameters: {}
+      parameters: qboParams
     };
   }
 

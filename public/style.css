@@ -8,8 +8,19 @@ header p { color: #7f8c8d; }
 .card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .card h2 { font-size: 1.1em; color: #2c3e50; margin-bottom: 12px; }
 
-.input-select, .input-file { width: 100%; padding: 10px; font-size: 1em; border: 1px solid #ddd; border-radius: 4px; }
+.input-select, .input-file, .input-text { width: 100%; padding: 10px; font-size: 1em; border: 1px solid #ddd; border-radius: 4px; }
 .input-file { padding: 8px; }
+
+.auth-grid { display: grid; gap: 8px; }
+.auth-grid .input-text { box-sizing: border-box; }
+
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 0.95em; color: #555; cursor: pointer; }
+.checkbox-label input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+
+.btn-small { padding: 6px 14px; font-size: 0.85em; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+.btn-small:hover { background: #2980b9; }
+
+#validateResult { font-size: 0.9em; }
 
 .info-box { margin-top: 12px; padding: 12px; background: #eef6ff; border-left: 4px solid #3498db; border-radius: 4px; font-size: 0.9em; }
 .status-msg { margin-top: 8px; font-size: 0.9em; color: #27ae60; }

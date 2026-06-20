@@ -1,65 +1,77 @@
 const ImportPage = {
-  step: 1, connections: [], fileData: null, mapping: {}, defaults: {},
-  importResult: null, isImporting: false,
+  step: 1,
+  connections: [],
+  fileData: null,
+  mapping: {},
+  defaults: {},
+  importResult: null,
+  isImporting: false,
 
   async init() {
     App.setActiveNav('import');
-    this.step = 1; this.fileData = null; this.mapping = {}; this.defaults = {}; this.importResult = null; this.isImporting = false;
+    this.step = 1;
+    this.fileData = null;
+    this.mapping = {};
+    this.defaults = {};
+    this.importResult = null;
+    this.isImporting = false;
+
     try {
       this.connections = await API.getConnections();
+      if (!this.connections.length) {
+        const c = document.getElementById('pageContent');
+        c.innerHTML = `
+          <div class="card text-center" style="padding:64px;">
+            <div style="font-size:48px;margin-bottom:16px;">&#128268;</div>
+            <h3>No QuickBooks Company Connected</h3>
+            <p style="color:var(--gray-500);margin:12px 0 24px;">Connect a QuickBooks Online company first to start importing.</p>
+            <button class="btn btn-primary btn-lg" onclick="DashboardPage.connectQBO()">Connect to QuickBooks</button>
+          </div>
+        `;
+        return;
+      }
       this.renderStep1();
-    } catch (e) { App.toast(e.message, 'error'); }
+    } catch (e) {
+      App.toast(e.message, 'error');
+    }
   },
 
-  steps() {
-    const labels = ['Setup', 'Upload & Map', 'Import', 'Results'];
-    const cur = this.importResult ? 4 : this.fileData ? 3 : this.step === 2 ? 2 : 1;
-    return `<div class="steps">${labels.map((l, i) => `<div class="step ${i+1 === cur ? 'active' : i+1 < cur ? 'done' : ''}">${l}</div>`).join('')}</div>`;
+  renderSteps() {
+    const labels = ['Setup', 'Upload', 'Map & Import', 'Results'];
+    const current = this.importResult ? 4 : this.fileData ? 3 : this.step === 2 ? 2 : 1;
+    return `<div class="steps">${labels.map((l, i) =>
+      `<div class="step ${i + 1 === current ? 'active' : i + 1 < current ? 'done' : ''}">${l}</div>`
+    ).join('')}</div>`;
   },
 
   renderStep1() {
     const c = document.getElementById('pageContent');
     c.innerHTML = `
-      ${this.steps()}
+      ${this.renderSteps()}
       <div class="card">
         <div class="card-title">Import Setup</div>
-        <div class="card-subtitle">Choose QuickBooks company and transaction type.</div>
+        <div class="card-subtitle">Choose which QuickBooks company and transaction type.</div>
         <div class="form-group">
           <label>QuickBooks Company</label>
           <select id="connSelect">
-            ${this.connections.length === 0 ? '<option value="">-- No connections --</option>' : this.connections.map(co => `<option value="${co.id}">${esc(co.company_name)}</option>`).join('')}
+            ${this.connections.map(co => `<option value="${co.id}">${esc(co.company_name)}</option>`).join('')}
           </select>
-          ${this.connections.length === 0 ? '<p style="font-size:12px;color:var(--danger);margin-top:4px">No QBO connection. <a href="#/dashboard" style="color:var(--primary)">Connect first</a> or use manual mode below.</p>' : ''}
         </div>
         <div class="form-group">
           <label>Transaction Type</label>
           <select id="typeSelect">
-            <option value="Customer">Customer</option>
-            <option value="Vendor">Vendor</option>
-            <option value="Bill">Bill (from Purchase Order)</option>
+            <option value="Expense">Expense (Check / Cash / Credit Card)</option>
+            <option value="Bill">Bill (Vendor Bill)</option>
           </select>
         </div>
-        <hr style="border:none;border-top:1px solid var(--gray-200);margin:20px 0">
-        <div class="card-title" style="font-size:15px">Or use Manual Tokens (no OAuth needed)</div>
-        <div class="defaults-grid">
-          <div class="form-group"><label>Access Token</label><input type="text" id="manualAccessToken" placeholder="QuickBooks access token"></div>
-          <div class="form-group"><label>Refresh Token</label><input type="text" id="manualRefreshToken" placeholder="QuickBooks refresh token"></div>
-          <div class="form-group"><label>Realm ID</label><input type="text" id="manualRealmId" placeholder="QuickBooks company ID"></div>
-          <div class="form-group"><label><input type="checkbox" id="manualSandbox"> Sandbox mode</label></div>
-        </div>
         <button class="btn btn-primary btn-lg mt-16" onclick="ImportPage.goStep2()">Next: Upload File</button>
-      </div>`;
+      </div>
+    `;
   },
 
   goStep2() {
-    this.connectionId = parseInt(document.getElementById('connSelect')?.value) || null;
+    this.connectionId = parseInt(document.getElementById('connSelect').value);
     this.transactionType = document.getElementById('typeSelect').value;
-    this.manualTokens = {
-      access_token: document.getElementById('manualAccessToken')?.value?.trim() || '',
-      refresh_token: document.getElementById('manualRefreshToken')?.value?.trim() || '',
-      realm_id: document.getElementById('manualRealmId')?.value?.trim() || '',
-      sandbox: document.getElementById('manualSandbox')?.checked || false
-    };
     this.step = 2;
     this.renderStep2();
   },
@@ -67,206 +79,297 @@ const ImportPage = {
   renderStep2() {
     const c = document.getElementById('pageContent');
     c.innerHTML = `
-      ${this.steps()}
+      ${this.renderSteps()}
       <div class="card">
         <div class="card-title">Upload File</div>
-        <div class="card-subtitle">Upload Excel (.xlsx/.xls) or CSV file.</div>
+        <div class="card-subtitle">Upload an Excel (.xlsx/.xls) or CSV file with your transactions.</div>
         <div class="upload-zone" id="uploadZone">
-          <div class="upload-zone-icon">&#128196;</div>
-          <div class="upload-zone-text">Drag & drop or click to browse</div>
-          <div class="upload-zone-hint">Supports .xlsx, .xls, .csv</div>
+          <div class="upload-zone-icon" id="uploadIcon">&#128196;</div>
+          <div class="upload-zone-text">Drag & drop your file here, or click to browse</div>
+          <div class="upload-zone-hint">Supports .xlsx, .xls, .csv (max 10MB)</div>
           <div id="uploadFileName" class="upload-file-name"></div>
           <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
         </div>
-        <div style="margin-top:16px;display:flex;gap:8px">
+        <div style="margin-top:16px;display:flex;gap:8px;">
           <button class="btn btn-outline" onclick="ImportPage.init()">Back</button>
-          <button class="btn btn-primary" id="parseBtn" onclick="ImportPage.parseFile()">Parse File</button>
+          <button class="btn btn-primary" id="uploadBtn" onclick="ImportPage.upload()" disabled>Upload & Preview</button>
         </div>
-        <div id="parseStatus" style="margin-top:12px"></div>
+        <div id="uploadStatus" style="margin-top:12px;"></div>
       </div>
-      <div id="previewArea" style="display:none">
-        <div class="card"><div class="card-title">Preview &amp; Map Columns</div>
-        <div id="mappingArea"></div></div>
-        <div class="card"><div class="card-title">Default Values</div>
-        <div class="defaults-grid" id="defaultsArea"></div>
-        <button class="btn btn-success btn-lg mt-16" onclick="ImportPage.execute()">Import to QuickBooks</button>
-        <div id="importProgress"></div></div>
-      </div>`;
+    `;
 
     const zone = document.getElementById('uploadZone');
     const input = document.getElementById('fileInput');
+
     zone.addEventListener('click', () => input.click());
     zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-    zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragover'); if (e.dataTransfer.files.length) this.setFile(e.dataTransfer.files[0]); });
-    input.addEventListener('change', () => { if (input.files.length) this.setFile(input.files[0]); });
+    zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragover'); if (e.dataTransfer.files.length) ImportPage.setFile(e.dataTransfer.files[0]); });
+    input.addEventListener('change', () => { if (input.files.length) ImportPage.setFile(input.files[0]); });
   },
 
   setFile(file) {
+    const valid = ['.xlsx', '.xls', '.csv'];
     const ext = '.' + file.name.split('.').pop().toLowerCase();
-    if (!['.xlsx', '.xls', '.csv'].includes(ext)) { App.toast('Please select Excel or CSV', 'error'); return; }
+    if (!valid.includes(ext)) {
+      App.toast('Please select an Excel or CSV file', 'error');
+      return;
+    }
     this.selectedFile = file;
     document.getElementById('uploadFileName').textContent = file.name;
     document.getElementById('uploadZone').classList.add('has-file');
+    document.getElementById('uploadBtn').disabled = false;
   },
 
-  parseFile() {
-    if (!this.selectedFile) { App.toast('Select a file first', 'error'); return; }
-    const status = document.getElementById('parseStatus');
-    status.textContent = 'Parsing...';
+  async upload() {
+    if (!this.selectedFile) return;
+    const btn = document.getElementById('uploadBtn');
+    const status = document.getElementById('uploadStatus');
+    btn.disabled = true;
+    status.innerHTML = 'Parsing file...';
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = new Uint8Array(ev.target.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        if (!json.length) { status.textContent = 'File is empty'; return; }
-
-        this.parsedData = json;
-        this.columns = Object.keys(json[0]);
-        this.autoMap();
-        this.renderPreview();
-        status.innerHTML = '<span style="color:var(--success)">Loaded ' + json.length + ' rows</span>';
-      } catch (e) { status.innerHTML = '<span style="color:var(--danger)">Error: ' + e.message + '</span>'; }
-    };
-    reader.readAsArrayBuffer(this.selectedFile);
+    try {
+      const result = await API.uploadFile(this.selectedFile);
+      this.fileData = result;
+      this.autoMapColumns();
+      this.renderStep3();
+    } catch (e) {
+      status.innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`;
+      btn.disabled = false;
+    }
   },
 
-  autoMap() {
-    const maps = {
-      name: ['name', 'customer name', 'vendor name', 'display name', 'full name'],
-      email: ['email', 'e-mail', 'email address'],
-      phone: ['phone', 'telephone', 'phone number', 'contact'],
-      address1: ['address1', 'address', 'street1', 'street', 'line1'],
-      address2: ['address2', 'street2', 'line2'],
-      city: ['city', 'town'],
-      state: ['state', 'province', 'region'],
-      zipcode: ['zipcode', 'zip', 'postcode', 'postal code'],
-      country: ['country'],
-      street1: ['street1', 'street', 'address1', 'address'],
-      po_id: ['po id', 'po number', 'purchase order', 'order id', 'id'],
-      sku: ['sku', 'item', 'item sku', 'product', 'product code'],
-      quantity: ['quantity', 'qty', 'count']
-    };
+  autoMapColumns() {
+    const cols = this.fileData.columns;
     this.mapping = {};
-    this.columns.forEach(col => {
+    const map = {
+      'date': ['date', 'txn date', 'transaction date', 'trans date', 'posting date'],
+      'vendor': ['vendor', 'vendor name', 'payee', 'supplier', 'name', 'supplier name'],
+      'amount': ['amount', 'total', 'sum', 'value', 'transaction amount', 'amt'],
+      'account': ['account', 'expense account', 'category', 'account name', 'expense category', 'type'],
+      'description': ['description', 'memo', 'note', 'notes', 'details', 'narration', 'particulars'],
+      'docNumber': ['check', 'check no', 'check number', 'reference', 'ref no', 'doc number', 'reference number'],
+      'dueDate': ['due date', 'due', 'pay by'],
+      'class': ['class', 'class name', 'tracking class'],
+      'taxAmount': ['linetaxamount', 'taxamount', 'tax amount', 'tax amt', 'gst amount', 'vat amount', 'hst amount', 'sales tax amount', 'igst amount', 'cgst amount', 'sgst amount', 'cess amount', 'total tax', 'output tax', 'input tax', 'tax value', 'gst value', 'hst value', 'tax total', 'tcs amount', 'tds amount'],
+      'taxCode': ['linetaxcode', 'taxcode', 'tax code', 'tax category', 'gst', 'hst', 'vat', 'sales tax', 'tax rate', 'igst', 'cgst', 'sgst', 'cess', 'tax %', 'gst %', 'hst %', 'igst %', 'cgst %', 'sgst %', 'tax percentage', 'output gst', 'input gst', 'tcs', 'tds', 'tax name']
+    };
+
+    cols.forEach(col => {
       const lower = col.toLowerCase().trim();
-      for (const [field, aliases] of Object.entries(maps)) {
-        if (aliases.some(a => lower === a || lower.includes(a))) { this.mapping[field] = col; break; }
+      for (const [field, aliases] of Object.entries(map)) {
+        if (aliases.some(a => lower === a || lower.includes(a))) {
+          this.mapping[field] = col;
+          break;
+        }
       }
     });
   },
 
-  renderPreview() {
-    document.getElementById('previewArea').style.display = 'block';
-    const type = this.transactionType;
-    const fields = type === 'Customer'
-      ? ['name','email','phone','address1','address2','city','state','zipcode','country']
-      : type === 'Vendor'
-      ? ['name','email','phone','street1','city','state','zipcode','country']
-      : ['po_id','sku','quantity'];
-
-    const fieldLabels = { name:'Name', email:'Email', phone:'Phone', address1:'Address 1', address2:'Address 2', city:'City', state:'State', zipcode:'Zip', country:'Country', street1:'Street', po_id:'PO Number', sku:'SKU', quantity:'Quantity' };
-
-    let html = '<div class="table-wrap" style="max-height:300px;overflow-y:auto"><table><thead><tr><th>#</th>' + this.columns.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>';
-    this.parsedData.slice(0, 15).forEach((row, i) => {
-      html += '<tr><td>' + (i+1) + '</td>' + this.columns.map(c => '<td>' + esc(row[c]) + '</td>').join('') + '</tr>';
-    });
-    if (this.parsedData.length > 15) html += '<tr><td colspan="' + (this.columns.length+1) + '" style="text-align:center;color:var(--gray-400)">... and ' + (this.parsedData.length - 15) + ' more rows</td></tr>';
-    html += '</tbody></table></div>';
-
-    html += '<div class="card-subtitle mt-16">Map columns to QuickBooks fields:</div>';
-    this.columns.forEach(col => {
-      const matched = Object.entries(this.mapping).find(([,v]) => v === col);
-      html += '<div class="mapping-row"><div class="mapping-col-name">' + esc(col) + '</div><div class="mapping-select"><select class="map-select" data-col="' + esc(col) + '"><option value="">-- Skip --</option>' + fields.map(f => '<option value="' + f + '" ' + (matched && matched[0] === f ? 'selected' : '') + '>' + (fieldLabels[f] || f) + '</option>').join('') + '</select></div></div>';
-    });
-    document.getElementById('mappingArea').innerHTML = html;
-
-    document.querySelectorAll('.map-select').forEach(sel => {
-      sel.addEventListener('change', () => this.updateMapping());
-    });
-
-    let defs = '';
-    if (type === 'Customer') {
-    } else if (type === 'Vendor') {
-    } else if (type === 'Bill') {
-      defs += '<div class="form-group"><label>Transaction Date</label><input type="date" id="defDate"></div>';
+  renderStep3() {
+    this.step = 3;
+    const c = document.getElementById('pageContent');
+    const cols = this.fileData.columns;
+    const preview = this.fileData.preview;
+    const fieldOptions = [
+      { value: '', label: '-- Skip --' },
+      { value: 'date', label: 'Date' },
+      { value: 'vendor', label: 'Vendor / Payee' },
+      { value: 'amount', label: 'Amount' },
+      { value: 'account', label: 'Account (Expense)' },
+      { value: 'description', label: 'Description / Memo' },
+      { value: 'docNumber', label: 'Doc Number / Check #' },
+      { value: 'class', label: 'Class (Tracking)' },
+      { value: 'taxCode', label: 'Tax Code' },
+      { value: 'taxAmount', label: 'Tax Amount' }
+    ];
+    if (this.transactionType === 'Bill') {
+      fieldOptions.push({ value: 'dueDate', label: 'Due Date' });
     }
-    document.getElementById('defaultsArea').innerHTML = defs;
+
+    let html = this.renderSteps();
+
+    html += `<div class="card"><div class="card-title">Preview (First ${preview.length} of ${this.fileData.totalRows} rows)</div>
+    <div class="table-wrap"><table><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>`;
+    preview.forEach(row => {
+      html += `<tr>${cols.map(c => `<td>${esc(row[c] || '')}</td>`).join('')}</tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+
+    html += `<div class="card"><div class="card-title">Map Columns to QuickBooks Fields</div>
+    <div class="card-subtitle">Tell us which column in your file corresponds to each QuickBooks field.</div>`;
+    cols.forEach((col, idx) => {
+      const matched = Object.values(this.mapping).includes(col);
+      html += `<div class="mapping-row">
+        <div class="mapping-col-name">${esc(col)}</div>
+        <div class="mapping-select">
+          <select id="map_${idx}" onchange="ImportPage.updateMapping(${idx}, this.value)">
+            ${fieldOptions.map(f =>
+              `<option value="${esc(f.value)}" ${(!f.value && !matched) ? 'selected' : (this.mapping[f.value] === col) ? 'selected' : ''}>${esc(f.label)}</option>`
+            ).join('')}
+          </select>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+
+    html += `<div class="card"><div class="card-title">Default Values</div>
+    <div class="card-subtitle">Set default values that apply to all rows (optional for mapped fields).</div>
+    <div class="defaults-grid">
+      <div class="form-group">
+        <label>Default Date (if not mapped)</label>
+        <input type="date" id="defDate">
+      </div>
+      <div class="form-group">
+        <label>Date Format in File</label>
+        <select id="defDateFormat">
+          <option value="">Auto-detect</option>
+          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+          <option value="MM-DD-YYYY">MM-DD-YYYY</option>
+          <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+          <option value="DD.MM.YYYY">DD.MM.YYYY</option>
+          <option value="Mon DD, YYYY">Mon DD, YYYY</option>
+          <option value="DD-Mon-YYYY">DD-Mon-YYYY</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Default Account Name</label>
+        <input type="text" id="defAccount" placeholder="e.g. Office Expenses">
+      </div>`;
+
+    if (this.transactionType === 'Expense') {
+      html += `
+      <div class="form-group">
+        <label>Payment Account (Bank)</label>
+        <input type="text" id="defPaymentAccount" placeholder="e.g. Business Checking">
+      </div>
+      <div class="form-group">
+        <label>Payment Type</label>
+        <select id="defPaymentType">
+          <option value="Check">Check</option>
+          <option value="Cash">Cash</option>
+          <option value="CreditCard">Credit Card</option>
+        </select>
+      </div>`;
+    }
+
+    if (this.transactionType === 'Bill') {
+      html += `<div class="form-group"><label>Default Due Date</label><input type="date" id="defDueDate"></div>`;
+    }
+
+    html += `<div class="form-group"><label>Default Class (if not mapped)</label><input type="text" id="defClass" placeholder="e.g. Consulting"></div>
+    <div class="form-group" style="grid-column:span 2">
+      <label><input type="checkbox" id="defUseClass" checked> Use Class Tracking (uncheck if class not enabled in QBO)</label>
+    </div>
+    <div class="form-group"><label>Default Tax Code (if not mapped)</label><input type="text" id="defTaxCode" placeholder="e.g. TAX or NON"></div>
+    <div class="form-group"><label>Default Tax Amount (if not mapped)</label><input type="number" step="0.01" id="defTaxAmount" placeholder="e.g. 10.00"></div>
+    <div class="form-group"><label>Tax Inclusive/Exclusive</label>
+      <select id="defTaxInclusive">
+        <option value="false">Exclusive (tax added on top)</option>
+        <option value="true">Inclusive (amount includes tax)</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Default Tax Rate Name (optional)</label><input type="text" id="defTaxRateName" placeholder="e.g. GST 10%"></div>`;
+
+    html += `</div><div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn btn-outline" onclick="ImportPage.goStep2()">Back</button>
+      <button class="btn btn-success btn-lg" id="importBtn" onclick="ImportPage.execute()">
+        Import ${this.fileData.totalRows} ${esc(this.transactionType)}(s)
+      </button>
+    </div></div>
+    <div id="importProgress"></div>`;
+
+    c.innerHTML = html;
   },
 
-  updateMapping() {
-    this.mapping = {};
-    document.querySelectorAll('.map-select').forEach(sel => {
-      if (sel.value) this.mapping[sel.value] = sel.dataset.col;
-    });
+  updateMapping(colIdx, value) {
+    const col = this.fileData.columns[colIdx];
+    for (const [k, v] of Object.entries(this.mapping)) {
+      if (v === col) delete this.mapping[k];
+    }
+    if (value) this.mapping[value] = col;
   },
 
   async execute() {
     if (this.isImporting) return;
     this.isImporting = true;
 
-    const missing = this.transactionType === 'Customer' ? ['name'] : this.transactionType === 'Vendor' ? ['name'] : ['po_id', 'sku', 'quantity'];
-    const unMapped = missing.filter(f => !this.mapping[f]);
-    if (unMapped.length) { App.toast('Map required fields: ' + unMapped.join(', '), 'error'); this.isImporting = false; return; }
-
-    const btn = event.target;
+    const btn = document.getElementById('importBtn');
     btn.disabled = true;
     btn.textContent = 'Importing...';
 
-    const defaults = { date: document.getElementById('defDate')?.value || '' };
-    const resultsDiv = document.getElementById('importProgress');
-    resultsDiv.innerHTML = '<div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0"></div></div>';
+    const defaults = {
+      date: document.getElementById('defDate')?.value || '',
+      accountName: document.getElementById('defAccount')?.value || '',
+      paymentAccount: document.getElementById('defPaymentAccount')?.value || '',
+      paymentType: document.getElementById('defPaymentType')?.value || 'Check',
+      dueDate: document.getElementById('defDueDate')?.value || '',
+      className: document.getElementById('defClass')?.value || '',
+      useClass: document.getElementById('defUseClass')?.checked ? 'true' : 'false',
+      taxCode: document.getElementById('defTaxCode')?.value || '',
+      taxAmount: document.getElementById('defTaxAmount')?.value || '',
+      taxInclusive: document.getElementById('defTaxInclusive')?.value || 'false',
+      taxRateName: document.getElementById('defTaxRateName')?.value || ''
+    };
+    const dateFormat = document.getElementById('defDateFormat')?.value || '';
 
-    let success = 0, errors = 0;
-    const total = this.parsedData.length;
+    try {
+      this.importResult = await API.executeImport({
+        connectionId: this.connectionId,
+        transactionType: this.transactionType,
+        mapping: this.mapping,
+        defaults,
+        dateFormat,
+        fileId: this.fileData.fileId
+      });
 
-    for (let i = 0; i < total; i++) {
-      const row = this.parsedData[i];
-      const payload = this.buildPayload(row);
-      const qboParams = this.manualTokens.access_token
-        ? { quickbooks_access_token: this.manualTokens.access_token, quickbooks_access_secret: this.manualTokens.refresh_token, quickbooks_realm: this.manualTokens.realm_id, quickbooks_sandbox: this.manualTokens.sandbox ? '1' : undefined }
-        : {};
-
-      const endpoint = this.transactionType === 'Customer' ? '/add_customer' : this.transactionType === 'Vendor' ? '/add_vendor' : '/add_bill_to_purchase_order';
-
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, parameters: qboParams })
-        });
-        const text = await res.text();
-        if (res.ok) { success++; resultsDiv.innerHTML += '<div style="color:var(--success);font-size:13px">Row ' + (i+1) + ': OK</div>'; }
-        else { errors++; resultsDiv.innerHTML += '<div style="color:var(--danger);font-size:13px">Row ' + (i+1) + ': ' + esc(text) + '</div>'; }
-      } catch (e) { errors++; resultsDiv.innerHTML += '<div style="color:var(--danger);font-size:13px">Row ' + (i+1) + ': ' + e.message + '</div>'; }
-
-      document.getElementById('progFill').style.width = ((i+1)/total*100) + '%';
+      this.renderResults();
+    } catch (e) {
+      const prog = document.getElementById('importProgress');
+      if (prog) prog.innerHTML = `<div style="color:var(--danger);padding:12px;">Error: ${esc(e.message)}</div>`;
+      btn.disabled = false;
+      btn.textContent = 'Retry Import';
     }
-
-    btn.disabled = false;
-    btn.textContent = 'Import to QuickBooks';
-
-    resultsDiv.innerHTML += '<div style="font-weight:600;margin-top:12px;padding:12px;background:' + (errors === 0 ? 'var(--success-bg)' : 'var(--danger-bg)') + ';border-radius:6px">Done: ' + success + ' succeeded, ' + errors + ' failed out of ' + total + ' rows.</div>';
     this.isImporting = false;
   },
 
-  buildPayload(row) {
-    const val = (f) => { const col = this.mapping[f]; return col ? row[col] : ''; };
-    const type = this.transactionType;
+  renderResults() {
+    const r = this.importResult;
+    const pct = r.total > 0 ? Math.round((r.success / r.total) * 100) : 0;
+    const c = document.getElementById('pageContent');
 
-    if (type === 'Customer') {
-      return { customer: { name: val('name'), email: val('email'), phone: val('phone'), billing_address: { address1: val('address1'), address2: val('address2'), city: val('city'), state: val('state'), country: val('country'), zipcode: val('zipcode') } } };
-    }
-    if (type === 'Vendor') {
-      return { vendor: { name: val('name'), email: val('email'), phone: val('phone'), street1: val('street1'), city: val('city'), state: val('state'), country: val('country'), zipcode: val('zipcode') } };
-    }
-    if (type === 'Bill') {
-      return { purchase_order: { id: val('po_id'), received_items: [{ sku: val('sku'), quantity: parseFloat(val('quantity')) || 0 }], transaction_date: document.getElementById('defDate')?.value || '' }, bill: {} };
-    }
-    return {};
+    c.innerHTML = `
+      ${this.renderSteps()}
+      <div class="card">
+        <div class="result-summary">
+          <div class="result-icon">${r.errors === 0 ? '&#9989;' : r.success > 0 ? '&#9888;&#65039;' : '&#10060;'}</div>
+          <h3>${r.errors === 0 ? 'Import Completed Successfully' : r.success > 0 ? 'Import Completed with Errors' : 'Import Failed'}</h3>
+          <div class="result-counts">
+            <div class="result-count">
+              <div class="num">${r.total}</div>
+              <div class="lbl">Total Rows</div>
+            </div>
+            <div class="result-count">
+              <div class="num" style="color:var(--success)">${r.success}</div>
+              <div class="lbl">Imported</div>
+            </div>
+            <div class="result-count">
+              <div class="num" style="color:var(--danger)">${r.errors}</div>
+              <div class="lbl">Errors</div>
+            </div>
+          </div>
+          <div class="progress-bar" style="margin-top:24px;max-width:400px;margin-left:auto;margin-right:auto;">
+            <div class="progress-fill ${r.errors === 0 ? 'success' : r.success > 0 ? 'partial' : ''}" style="width:${pct}%"></div>
+          </div>
+          <p style="color:var(--gray-500);font-size:13px;margin-top:8px;">${pct}% success rate</p>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:center;">
+          <button class="btn btn-primary" onclick="ImportPage.init()">Import Another File</button>
+          <a href="#/history" class="btn btn-outline">View Details</a>
+        </div>
+      </div>
+    `;
   }
 };
 

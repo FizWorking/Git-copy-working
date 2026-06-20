@@ -6,7 +6,6 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
   set :logging, true
   set :show_exceptions, false
 
-  # Load store
   QBIntegration::Store.init
 
   before do
@@ -49,9 +48,9 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
         access_token: tokens[:access_token],
         refresh_token: tokens[:refresh_token]
       })
-      redirect '/#!/dashboard?qbo=connected'
+      redirect '/#/dashboard?qbo=connected'
     rescue => e
-      redirect '/#!/dashboard?error=oauth_failed'
+      redirect '/#/dashboard?error=oauth_failed'
     end
   end
 
@@ -59,10 +58,8 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
 
   get '/api/qbo/connections' do
     conns = QBIntegration::Store.all('qbo_connections').map do |c|
-      {
-        id: c['id'], company_id: c['company_id'],
-        company_name: c['company_name'], connected_at: c['created_at']
-      }
+      { id: c['id'], company_id: c['company_id'],
+        company_name: c['company_name'], connected_at: c['created_at'] }
     end
     content_type :json
     conns.to_json
@@ -85,6 +82,7 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     data = parse_uploaded_file(params[:file][:tempfile], ext)
 
     file_id = SecureRandom.uuid
+    data[:file_name] = params[:file][:filename]
     store_file_data(file_id, data)
 
     content_type :json
@@ -193,176 +191,7 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     imp.to_json
   end
 
-  # ─── Error handler ──────────────────────────────────────────
-
-  error do
-    content_type :json if request.content_type&.include?('json')
-    result 500, lookup_error_message
-  end
-
-  # ─── Helper methods ─────────────────────────────────────────
-
-  private
-
-  def parse_uploaded_file(tempfile, ext)
-    require 'csv'
-    case ext
-    when '.csv'
-      rows = CSV.read(tempfile.path, headers: true, liberal_parsing: true)
-      data = rows.map { |r| r.to_h }
-    when '.xlsx', '.xls'
-      require 'roo'
-      workbook = Roo::Spreadsheet.open(tempfile.path)
-      sheet = workbook.sheet(0)
-      headers = sheet.row(1).map(&:to_s)
-      data = (2..sheet.last_row).map do |i|
-        row = sheet.row(i)
-        headers.zip(row).to_h
-      end
-    else
-      raise "Unsupported format: #{ext}"
-    end
-
-    data.reject! { |r| r.values.all?(&:nil?) }
-    columns = data.first&.keys || []
-
-    {
-      columns: columns,
-      preview: data.first(10),
-      totalRows: data.length,
-      all_data: data
-    }
-  end
-
-  def store_file_data(file_id, data)
-    dir = File.join(File.dirname(__FILE__), 'tmp')
-    FileUtils.mkdir_p(dir)
-    File.write(File.join(dir, "#{file_id}.json"), JSON.dump(data))
-  end
-
-  def read_file_data(file_id)
-    path = File.join(File.dirname(__FILE__), 'tmp', "#{file_id}.json")
-    return nil unless File.exist?(path)
-    JSON.parse(File.read(path), symbolize_names: true)
-  end
-
-  def delete_file_data(file_id)
-    path = File.join(File.dirname(__FILE__), 'tmp', "#{file_id}.json")
-    File.delete(path) if File.exist?(path)
-  end
-
-  def build_qbo_config(connection)
-    {
-      'quickbooks_access_token' => connection['access_token'],
-      'quickbooks_access_secret' => connection['refresh_token'],
-      'access_token' => connection['access_token'],
-      'refresh_token' => connection['refresh_token'],
-      'quickbooks_realm' => connection['realm_id'] || connection['company_id'],
-      'realmId' => connection['realm_id'] || connection['company_id']
-    }
-  end
-
-  def build_import_payload(type, row, mapping, defaults, date_format)
-    val = ->(field) {
-      col = mapping[field]
-      col ? row[col.to_s]&.to_s&.strip : nil
-    }
-
-    case type
-    when 'Customer'
-      {
-        'customer' => {
-          'name' => val.call('name') || defaults['name'] || '',
-          'email' => val.call('email') || '',
-          'phone' => val.call('phone') || '',
-          'billing_address' => {
-            'address1' => val.call('address1') || '',
-            'address2' => val.call('address2') || '',
-            'city' => val.call('city') || '',
-            'state' => val.call('state') || '',
-            'country' => val.call('country') || '',
-            'zipcode' => val.call('zipcode') || ''
-          }
-        },
-        'parameters' => {}
-      }
-    when 'Vendor'
-      {
-        'vendor' => {
-          'name' => val.call('name') || defaults['name'] || '',
-          'email' => val.call('email') || '',
-          'phone' => val.call('phone') || '',
-          'street1' => val.call('street1') || '',
-          'city' => val.call('city') || '',
-          'state' => val.call('state') || '',
-          'country' => val.call('country') || '',
-          'zipcode' => val.call('zipcode') || ''
-        },
-        'parameters' => {}
-      }
-    when 'Bill'
-      {
-        'purchase_order' => {
-          'id' => val.call('po_id') || '',
-          'received_items' => [
-            { 'sku' => val.call('sku') || '', 'quantity' => (val.call('quantity') || '0').to_f }
-          ],
-          'transaction_date' => val.call('transaction_date') || defaults['date'] || ''
-        },
-        'bill' => {},
-        'parameters' => {}
-      }
-    when 'Expense'
-      amount = (val.call('amount') || '0').gsub(/[^0-9.\-]/, '').to_f
-      acct_name = val.call('account') || defaults['accountName'] || ''
-      {
-        'purchase' => {
-          'account_ref' => { 'name' => acct_name },
-          'line' => [{
-            'amount' => amount.abs,
-            'detail_type' => 'AccountBasedExpenseLineDetail',
-            'account_based_expense_line_detail' => {
-              'account_ref' => { 'name' => acct_name }
-            }
-          }],
-          'entity_ref' => val.call('vendor') ? { 'name' => val.call('vendor'), 'type' => 'Vendor' } : nil,
-          'payment_type' => defaults['paymentType'] || 'Check',
-          'txn_date' => val.call('date') || defaults['date'] || ''
-        }.compact,
-        'parameters' => {}
-      }
-    else
-      {}
-    end
-  end
-
-  def call_qbo_endpoint(type, payload, config)
-    result = nil
-
-    case type
-    when 'Customer'
-      code, summary, obj = QBIntegration::Customer.new(payload, config).create
-      qbo_id = obj.is_a?(Hash) ? (obj['qbo_id'] || obj[:qbo_id]) : nil
-      result = { code: code, message: summary, qbo_id: qbo_id }
-    when 'Vendor'
-      code, summary, obj = QBIntegration::Vendor.new(payload, config).create
-      qbo_id = obj.is_a?(Hash) ? (obj['qbo_id'] || obj[:qbo_id]) : nil
-      result = { code: code, message: summary, qbo_id: qbo_id }
-    when 'Bill'
-      code, summary, bill, po = QBIntegration::Bill.new(payload, config).create
-      qbo_id = bill.is_a?(Hash) ? (bill['id'] || bill[:id]) : nil
-      result = { code: code, message: summary, qbo_id: qbo_id }
-    when 'Expense'
-      result = { code: 200, message: 'Expense import not directly supported via endpoint', qbo_id: nil }
-    else
-      raise "Unknown transaction type: #{type}"
-    end
-
-    raise result[:message] if result[:code] != 200
-    result
-  end
-
-  def notify_honeybadger e
+  # ─── QBO Integration Endpoints ──────────────────────────────
 
   post '/get_tokens' do
     base_service = QBIntegration::Service::Token.new(@config)
@@ -374,7 +203,7 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     result 200, "Tokens successfully retrieved"
   end
 
-  post '/validate_token'do
+  post '/validate_token' do
     token = QBIntegration::Service::Token.new(@config)
     if token.valid?
       result 200
@@ -468,21 +297,13 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     result code, summary
   end
 
-  ### ACCOUNTTECH SPECIFIC ENDPOINT ###
-  # Use the above journal endpoints for general use
   post '/add_journal_entry' do
     if @payload['journal_entry']['action'] == "ADD"
-      puts 'ADD'
       code, summary = QBIntegration::JournalEntry.new(@payload, @config).update
-
     elsif @payload['journal_entry']['action'] == "UPDATE"
-      puts 'UPDATE'
       code, summary = QBIntegration::JournalEntry.new(@payload, @config).update
-
     elsif @payload['journal_entry']['action'] == "DELETE"
-      puts 'DELETE'
       code, summary = QBIntegration::JournalEntry.new(@payload, @config).delete
-
     else
       code = 200
       summary = "No Valid Action Given"
@@ -490,7 +311,6 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
 
     result code, summary
   end
-  # End of Specific Endpoint
 
   post '/update_order' do
     code, summary, updated_order = QBIntegration::Order.new(@payload, @config).update
@@ -689,6 +509,175 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     result code, summary
   end
 
+  # ─── Error handler ──────────────────────────────────────────
+
+  error do
+    content_type :json if request.content_type&.include?('json')
+    result 500, lookup_error_message
+  end
+
+  # ─── Helper methods ─────────────────────────────────────────
+
+  private
+
+  def parse_uploaded_file(tempfile, ext)
+    require 'csv'
+    case ext
+    when '.csv'
+      rows = CSV.read(tempfile.path, headers: true, liberal_parsing: true)
+      data = rows.map { |r| r.to_h }
+    when '.xlsx', '.xls'
+      require 'roo'
+      workbook = Roo::Spreadsheet.open(tempfile.path)
+      sheet = workbook.sheet(0)
+      headers = sheet.row(1).map(&:to_s)
+      data = (2..sheet.last_row).map do |i|
+        row = sheet.row(i)
+        headers.zip(row).to_h
+      end
+    else
+      raise "Unsupported format: #{ext}"
+    end
+
+    data.reject! { |r| r.values.all?(&:nil?) }
+    columns = data.first&.keys || []
+
+    {
+      columns: columns,
+      preview: data.first(10),
+      totalRows: data.length,
+      all_data: data
+    }
+  end
+
+  def store_file_data(file_id, data)
+    dir = File.join(File.dirname(__FILE__), 'tmp')
+    FileUtils.mkdir_p(dir)
+    File.write(File.join(dir, "#{file_id}.json"), JSON.dump(data))
+  end
+
+  def read_file_data(file_id)
+    path = File.join(File.dirname(__FILE__), 'tmp', "#{file_id}.json")
+    return nil unless File.exist?(path)
+    JSON.parse(File.read(path), symbolize_names: true)
+  end
+
+  def delete_file_data(file_id)
+    path = File.join(File.dirname(__FILE__), 'tmp', "#{file_id}.json")
+    File.delete(path) if File.exist?(path)
+  end
+
+  def build_qbo_config(connection)
+    {
+      'quickbooks_access_token' => connection['access_token'],
+      'quickbooks_access_secret' => connection['refresh_token'],
+      'access_token' => connection['access_token'],
+      'refresh_token' => connection['refresh_token'],
+      'quickbooks_realm' => connection['realm_id'] || connection['company_id'],
+      'realmId' => connection['realm_id'] || connection['company_id']
+    }
+  end
+
+  def build_import_payload(type, row, mapping, defaults, date_format)
+    val = ->(field) {
+      col = mapping[field]
+      col ? row[col.to_s]&.to_s&.strip : nil
+    }
+
+    case type
+    when 'Customer'
+      {
+        'customer' => {
+          'name' => val.call('name') || defaults['name'] || '',
+          'email' => val.call('email') || '',
+          'phone' => val.call('phone') || '',
+          'billing_address' => {
+            'address1' => val.call('address1') || '',
+            'address2' => val.call('address2') || '',
+            'city' => val.call('city') || '',
+            'state' => val.call('state') || '',
+            'country' => val.call('country') || '',
+            'zipcode' => val.call('zipcode') || ''
+          }
+        },
+        'parameters' => {}
+      }
+    when 'Vendor'
+      {
+        'vendor' => {
+          'name' => val.call('name') || defaults['name'] || '',
+          'email' => val.call('email') || '',
+          'phone' => val.call('phone') || '',
+          'street1' => val.call('street1') || '',
+          'city' => val.call('city') || '',
+          'state' => val.call('state') || '',
+          'country' => val.call('country') || '',
+          'zipcode' => val.call('zipcode') || ''
+        },
+        'parameters' => {}
+      }
+    when 'Bill'
+      {
+        'purchase_order' => {
+          'id' => val.call('po_id') || '',
+          'received_items' => [
+            { 'sku' => val.call('sku') || '', 'quantity' => (val.call('quantity') || '0').to_f }
+          ],
+          'transaction_date' => val.call('transaction_date') || defaults['date'] || ''
+        },
+        'bill' => {},
+        'parameters' => {}
+      }
+    when 'Expense'
+      amount = (val.call('amount') || '0').gsub(/[^0-9.\-]/, '').to_f
+      acct_name = val.call('account') || defaults['accountName'] || ''
+      {
+        'purchase' => {
+          'account_ref' => { 'name' => acct_name },
+          'line' => [{
+            'amount' => amount.abs,
+            'detail_type' => 'AccountBasedExpenseLineDetail',
+            'account_based_expense_line_detail' => {
+              'account_ref' => { 'name' => acct_name }
+            }
+          }],
+          'entity_ref' => val.call('vendor') ? { 'name' => val.call('vendor'), 'type' => 'Vendor' } : nil,
+          'payment_type' => defaults['paymentType'] || 'Check',
+          'txn_date' => val.call('date') || defaults['date'] || ''
+        }.compact,
+        'parameters' => {}
+      }
+    else
+      {}
+    end
+  end
+
+  def call_qbo_endpoint(type, payload, config)
+    result = nil
+
+    case type
+    when 'Customer'
+      code, summary, obj = QBIntegration::Customer.new(payload, config).create
+      qbo_id = obj.is_a?(Hash) ? (obj['qbo_id'] || obj[:qbo_id]) : nil
+      result = { code: code, message: summary, qbo_id: qbo_id }
+    when 'Vendor'
+      code, summary, obj = QBIntegration::Vendor.new(payload, config).create
+      qbo_id = obj.is_a?(Hash) ? (obj['qbo_id'] || obj[:qbo_id]) : nil
+      result = { code: code, message: summary, qbo_id: qbo_id }
+    when 'Bill'
+      code, summary, bill, po = QBIntegration::Bill.new(payload, config).create
+      qbo_id = bill.is_a?(Hash) ? (bill['id'] || bill[:id]) : nil
+      result = { code: code, message: summary, qbo_id: qbo_id }
+    when 'Expense'
+      result = { code: 200, message: 'Expense import not directly supported via endpoint', qbo_id: nil }
+    else
+      raise "Unknown transaction type: #{type}"
+    end
+
+    raise result[:message] if result[:code] != 200
+    result
+  end
+
   def lookup_error_message
     case env['sinatra.error'].class.to_s
     when "Quickbooks::AuthorizationFailure"
@@ -700,9 +689,7 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     end
   end
 
-  private
-
-  def notify_honeybadger e
+  def notify_honeybadger(e)
     Honeybadger.notify(
       e,
       context: {

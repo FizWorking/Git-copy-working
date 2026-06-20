@@ -5,26 +5,39 @@ function esc(s) {
 
 const API = {
   async request(method, path, data) {
-    const opts = { method, headers: {} };
+    const opts = {
+      method,
+      headers: {
+        'Authorization': 'Bearer no-auth-required'
+      }
+    };
+
     if (data instanceof FormData) {
       opts.body = data;
     } else if (data) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(data);
     }
+
     const res = await fetch(path, opts);
     let json;
-    try { json = await res.json(); } catch { throw new Error(`Server returned ${res.status}: ${res.statusText}`); }
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error(`Server returned ${res.status}: ${res.statusText}`);
+    }
     if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
     return json;
   },
+
   get(path) { return this.request('GET', path); },
   post(path, data) { return this.request('POST', path, data); },
-  del(path) { return this.request('DELETE', path); },
+  delete(path) { return this.request('DELETE', path); },
 
   getQboAuthUrl() { return this.get('/api/qbo/auth-url'); },
   getConnections() { return this.get('/api/qbo/connections'); },
-  disconnectConnection(id) { return this.del(`/api/qbo/connections/${id}`); },
+  disconnectConnection(id) { return this.delete(`/api/qbo/connections/${id}`); },
+
   uploadFile(file) {
     const fd = new FormData();
     fd.append('file', file);

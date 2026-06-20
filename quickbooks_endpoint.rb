@@ -133,13 +133,13 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
     end
 
     config = build_qbo_config(connection)
-    rows = cached[:all_data]
+    rows = cached['all_data']
     success = 0
     errors = 0
 
     imp = QBIntegration::Store.insert('imports', {
       qbo_connection_id: connection_id,
-      file_name: cached[:file_name],
+      file_name: cached['file_name'],
       transaction_type: transaction_type,
       total_rows: rows.length,
       success_count: 0,
@@ -573,7 +573,7 @@ class QuickbooksEndpoint < EndpointBase::Sinatra::Base
   def read_file_data(file_id)
     path = File.join(File.dirname(__FILE__), 'tmp', "#{file_id}.json")
     return nil unless File.exist?(path)
-    JSON.parse(File.read(path), symbolize_names: true)
+    JSON.parse(File.read(path))
   end
 
   def delete_file_data(file_id)
